@@ -1,93 +1,156 @@
+# pip freeze > requirements.txt
+
 import streamlit as st
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-st.set_page_config(page_title="Flexible Matrix Calculator", layout="centered")
-st.title("🧮 Flexible Matrix Calculator")
+st.set_page_config(page_title="Advanced Matrix Calculator", layout="centered")
+st.title("🧮 NumPyMatrixTool")
 
-# Step 1: How many matrices?
-matrix_count = st.radio("How many matrices do you want to use?", [1, 2])
+# --- Matrix Setup ---
+matrix_count = st.number_input("How many matrices do you want to enter?", min_value=1, max_value=5, value=2)
+matrices = {}
+dimensions = {}
 
-# Step 2: Dimensions per matrix
-st.markdown("### Matrix A Dimensions")
-rows_a = st.number_input("Rows (A)", min_value=1, max_value=10, value=2, key="rows_a")
-cols_a = st.number_input("Cols (A)", min_value=1, max_value=10, value=2, key="cols_a")
+# --- Input Matrices ---
+for i in range(matrix_count):
+    name = chr(65 + i)  # A, B, C...
+    st.markdown(f"### Matrix {name}")
+    rows = st.number_input(f"Rows for Matrix {name}", min_value=1, max_value=10, value=2, key=f"r_{name}")
+    cols = st.number_input(f"Cols for Matrix {name}", min_value=1, max_value=10, value=2, key=f"c_{name}")
+    dimensions[name] = (rows, cols)
 
-if matrix_count == 2:
-    st.markdown("### Matrix B Dimensions")
-    rows_b = st.number_input("Rows (B)", min_value=1, max_value=10, value=2, key="rows_b")
-    cols_b = st.number_input("Cols (B)", min_value=1, max_value=10, value=2, key="cols_b")
+    data = []
+    for r in range(int(rows)):
+        row_vals = []
+        cols_ = st.columns(int(cols))
+        for c in range(int(cols)):
+            val = cols_[c].number_input(f"{name}[{r+1},{c+1}]", key=f"{name}_{r}_{c}")
+            row_vals.append(val)
+        data.append(row_vals)
+    matrices[name] = np.array(data)
 
-# Step 3: Input for Matrix A
-st.markdown("### Matrix A")
-matrix_a = []
-for i in range(int(rows_a)):
-    row = []
-    cols_ = st.columns(int(cols_a))
-    for j in range(int(cols_a)):
-        row.append(cols_[j].number_input(f"A[{i+1},{j+1}]", key=f"a_{i}_{j}"))
-    matrix_a.append(row)
-A = np.array(matrix_a)
+# --- Heatmap Function ---
+def plot_heatmap(matrix, title="Matrix Heatmap"):
+    fig, ax = plt.subplots()
+    sns.heatmap(matrix, annot=True, fmt=".2f", cmap="viridis", ax=ax)
+    ax.set_title(title)
+    st.pyplot(fig)
 
-# Step 4: Input for Matrix B if applicable
-if matrix_count == 2:
-    st.markdown("### Matrix B")
-    matrix_b = []
-    for i in range(int(rows_b)):
-        row = []
-        cols_ = st.columns(int(cols_b))
-        for j in range(int(cols_b)):
-            row.append(cols_[j].number_input(f"B[{i+1},{j+1}]", key=f"b_{i}_{j}"))
-        matrix_b.append(row)
-    B = np.array(matrix_b)
+# --- Eigenvector Plot Function (2×2 only) ---
+def plot_eigenvectors(matrix, eigvals, eigvecs, title="Eigenvector Visualization"):
+    fig, ax = plt.subplots()
+    ax.set_xlim(-2, 2)
+    ax.set_ylim(-2, 2)
+    ax.axhline(0, color='gray')
+    ax.axvline(0, color='gray')
 
-# Step 5: Operation selection
-st.markdown("### Choose Operation")
-if matrix_count == 1:
-    operations = ["Transpose A", "Inverse A"]
+    for i in range(len(eigvals)):
+        v = eigvecs[:, i]
+        ax.arrow(0, 0, v[0], v[1], head_width=0.1, head_length=0.1, fc='red', ec='black')
+        ax.text(v[0]*1.1, v[1]*1.1, f"v{i+1}", fontsize=10)
+    ax.set_title(title)
+    ax.grid(True)
+    st.pyplot(fig)
+
+# --- Operation Type Selection ---
+st.markdown("### 🔧 Choose Operation Type")
+op_type = st.radio("Operation Type", ["Binary (A+B, A@B)", "Unary (Transpose, Inverse, Rank, Det, Eigenvalues)"])
+
+# --- Binary Operations ---
+if op_type.startswith("Binary"):
+    m1 = st.selectbox("Matrix 1", list(matrices.keys()), key="m1")
+    m2 = st.selectbox("Matrix 2", list(matrices.keys()), key="m2")
+    bin_op = st.selectbox("Binary Operation", ["Add", "Subtract", "Multiply"])
+
+    if st.button("Calculate Binary Operation"):
+        A = matrices[m1]
+        B = matrices[m2]
+
+        try:
+            if bin_op == "Add":
+                if A.shape != B.shape:
+                    st.error("Addition requires same shapes.")
+                else:
+                    result = A + B
+                    st.write("### ✅ Result")
+                    st.write(result)
+                    plot_heatmap(result, title="Result Heatmap")
+
+            elif bin_op == "Subtract":
+                if A.shape != B.shape:
+                    st.error("Subtraction requires same shapes.")
+                else:
+                    result = A - B
+                    st.write("### ✅ Result")
+                    st.write(result)
+                    plot_heatmap(result, title="Result Heatmap")
+
+            elif bin_op == "Multiply":
+                if A.shape[1] != B.shape[0]:
+                    st.error("Matrix multiplication requires A.cols == B.rows")
+                else:
+                    result = A @ B
+                    st.write("### ✅ Result")
+                    st.write(result)
+                    plot_heatmap(result, title="Result Heatmap")
+
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+# --- Unary Operations ---
 else:
-    operations = ["Add", "Subtract", "Multiply", "Transpose A", "Transpose B", "Inverse A", "Inverse B"]
+    m = st.selectbox("Select Matrix", list(matrices.keys()), key="unary")
+    unary_op = st.selectbox("Unary Operation", ["Transpose", "Inverse", "Rank", "Determinant", "Eigenvalues"])
 
-operation = st.selectbox("Select Operation", operations)
+    if st.button("Calculate Unary Operation"):
+        M = matrices[m]
+        try:
+            if unary_op == "Transpose":
+                result = M.T
+                st.write("### ✅ Transpose")
+                st.write(result)
+                plot_heatmap(result, title=f"Transpose of {m}")
 
-# Step 6: Perform Operation
-def perform_operation():
-    try:
-        if operation == "Add":
-            if A.shape != B.shape:
-                st.error("Addition requires matrices of the same shape.")
-                return None
-            return A + B
-        elif operation == "Subtract":
-            if A.shape != B.shape:
-                st.error("Subtraction requires matrices of the same shape.")
-                return None
-            return A - B
-        elif operation == "Multiply":
-            if A.shape[1] != B.shape[0]:
-                st.error("Multiplication requires A.columns == B.rows.")
-                return None
-            return A @ B
-        elif operation == "Transpose A":
-            return A.T
-        elif operation == "Transpose B":
-            return B.T
-        elif operation == "Inverse A":
-            if A.shape[0] != A.shape[1]:
-                st.error("Inverse of A requires a square matrix.")
-                return None
-            return np.linalg.inv(A)
-        elif operation == "Inverse B":
-            if B.shape[0] != B.shape[1]:
-                st.error("Inverse of B requires a square matrix.")
-                return None
-            return np.linalg.inv(B)
-    except np.linalg.LinAlgError:
-        st.error("Matrix is singular or non-invertible.")
-    return None
+            elif unary_op == "Inverse":
+                if M.shape[0] != M.shape[1]:
+                    st.error("Inverse requires square matrix.")
+                else:
+                    result = np.linalg.inv(M)
+                    st.write("### ✅ Inverse")
+                    st.write(result)
+                    plot_heatmap(result, title=f"Inverse of {m}")
 
-# Step 7: Show result
-if st.button("Calculate"):
-    result = perform_operation()
-    if result is not None:
-        st.markdown("### ✅ Result")
-        st.write(result)
+            elif unary_op == "Rank":
+                rank = np.linalg.matrix_rank(M)
+                st.write("### ✅ Rank:", rank)
+                plot_heatmap(M, title=f"Matrix {m}")
+
+            elif unary_op == "Determinant":
+                if M.shape[0] != M.shape[1]:
+                    st.error("Determinant requires square matrix.")
+                else:
+                    det = np.linalg.det(M)
+                    st.write("### ✅ Determinant:", round(det, 4))
+                    plot_heatmap(M, title=f"Matrix {m}")
+
+            elif unary_op == "Eigenvalues":
+                if M.shape[0] != M.shape[1]:
+                    st.error("Eigenvalue calc requires square matrix.")
+                else:
+                    eigvals, eigvecs = np.linalg.eig(M)
+                    st.write("### ✅ Eigenvalues:")
+                    st.write(np.round(eigvals, 4))
+                    st.write("### 🧭 Eigenvectors:")
+                    st.write(np.round(eigvecs, 4))
+                    plot_heatmap(M, title=f"Matrix {m}")
+                    if M.shape == (2, 2):
+                        plot_eigenvectors(M, eigvals, eigvecs)
+                    else:
+                        st.warning("Eigenvector visualization is supported for 2×2 matrices only.")
+
+        except np.linalg.LinAlgError:
+            st.error("Matrix is singular or invalid for this operation.")
+        except Exception as e:
+            st.error(f"Error: {e}")
